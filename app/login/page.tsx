@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { AuthField } from "@/components/auth/AuthField";
 import { validateEmail, validatePassword } from "@/lib/authValidation";
 import { api } from "@/lib/api";
@@ -35,12 +35,8 @@ const loginFields = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<LoginErrors>({});
-
-  // /login?redirectTo=/home 같은 값 있으면 거기로 보내기
-  const redirectTo = searchParams.get("redirectTo") || "/home";
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -65,14 +61,28 @@ export default function LoginPage() {
     }
 
     try {
-      await api.post("/api/recorday/login", {
+      const res = await api.post("/api/recorday/login", {
         email,
         password,
       });
 
-      // axios는 200~299 아니면 바로 catch로 던지니까
-      // 여기까지 왔다는 건 성공한 것
-      router.push(redirectTo);
+      const { accessToken, refreshToken } = res.data.data;
+
+      const accessExpires = new Date(Date.now() + 60 * 60 * 1000).toUTCString();
+      const refreshExpires = new Date(
+        Date.now() + 14 * 24 * 60 * 60 * 1000
+      ).toUTCString();
+
+      // 개발 환경에서는 Secure X
+      // 배포 환경에서는 Secure; SameSite=Strict
+      document.cookie = `accessToken=${encodeURIComponent(
+        accessToken
+      )}; Path=/; Expires=${accessExpires}; SameSite=Lax`;
+      document.cookie = `refreshToken=${encodeURIComponent(
+        refreshToken
+      )}; Path=/; Expires=${refreshExpires}; SameSite=Lax`;
+
+      router.push("/home");
     } catch (error) {
       console.error(error);
       const msg = "로그인에 실패했습니다. 이메일/비밀번호를 확인해 주세요.";
